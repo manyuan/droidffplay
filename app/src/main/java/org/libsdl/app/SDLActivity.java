@@ -17,6 +17,7 @@ import android.view.inputmethod.InputMethodManager;
 import android.widget.RelativeLayout;
 import android.widget.Button;
 import android.widget.LinearLayout;
+import android.widget.SeekBar;
 import android.widget.TextView;
 import android.os.*;
 import android.util.DisplayMetrics;
@@ -28,6 +29,8 @@ import android.hardware.*;
 import android.content.pm.ActivityInfo;
 import android.content.pm.PackageManager;
 import android.content.pm.ApplicationInfo;
+
+import com.many.droidffplay.R;
 
 /**
     SDL Activity
@@ -61,6 +64,11 @@ public class SDLActivity extends Activity {
     protected static boolean mScreenKeyboardShown;
     protected static ViewGroup mLayout;
     protected static SDLClipboardHandler mClipboardHandler;
+
+    protected static View mPannel;
+    protected static TextView mSeekText;
+    protected static SeekBar mSeekbar;
+    protected static int vduriation;
 
 
     // This is what SDL runs in. It invokes SDL_main(), eventually
@@ -123,7 +131,20 @@ public class SDLActivity extends Activity {
      */
     protected String[] getArguments() {
         //return new String[0];
-        String pa = "-fs /data/test.mp4";
+        String pa = "-fs rtmp://live.hkstv.hk.lxdns.com/live/hks";
+        //pa = "-fs rtsp://184.72.239.149/vod/mp4://BigBuckBunny_175k.mov";
+        //pa = "-fs rtsp://rtsp-v3-spbtv.msk.spbtv.com/spbtv_v3_1/214_110.sdp"; //vpn
+        //pa = "-fs http://live.hkstv.hk.lxdns.com/live/hks/playlist.m3u8";
+        //pa = "-fs -autoexit /data/test.mp4";
+
+        Intent intent = getIntent();
+        if (intent != null && intent.getData() != null) {
+            String filename = intent.getData().getPath();
+            if (filename != null) {
+                Log.v(TAG, "Got filename: " + filename);
+                pa = "-fs -autoexit " + filename;
+            }
+        }
         return pa.split(" ");
     }
 
@@ -210,10 +231,16 @@ public class SDLActivity extends Activity {
         // Set up the surface
         mSurface = new SDLSurface(getApplication());
 
-        mLayout = new RelativeLayout(this);
+        //mLayout = new RelativeLayout(this);
+        //mLayout.addView(mSurface);
+
+        //setContentView(mLayout);
+        setContentView(R.layout.main);
+        mLayout = (RelativeLayout)findViewById(R.id.sdlsurface);
         mLayout.addView(mSurface);
 
-        setContentView(mLayout);
+        mPannel = findViewById(R.id.pannel);
+        initPannel(mPannel);
 
         setWindowStyle(false);
 
@@ -227,6 +254,68 @@ public class SDLActivity extends Activity {
             }
         }
     }
+
+    private void initPannel(View v){
+        Button bt_p = (Button)findViewById(R.id.bt_p);
+        Button bt_q = (Button)findViewById(R.id.bt_q);
+        Button bt_w = (Button)findViewById(R.id.bt_w);
+        Button bt_s = (Button)findViewById(R.id.bt_s);
+        Button bt_left = (Button)findViewById(R.id.bt_left);
+        Button bt_right = (Button)findViewById(R.id.bt_right);
+        bt_w.setOnClickListener(pclick);
+        bt_s.setOnClickListener(pclick);
+        bt_p.setOnClickListener(pclick);
+        bt_q.setOnClickListener(pclick);
+        bt_left.setOnClickListener(pclick);
+        bt_right.setOnClickListener(pclick);
+
+        mSeekbar = (SeekBar)findViewById(R.id.seekbar);
+        mSeekText = (TextView)findViewById(R.id.seektext);
+        TextView tit = (TextView)findViewById(R.id.vtitle);
+        String[] st = getArguments();
+        tit.setText(st[st.length-1]);
+
+        mSeekbar.setOnSeekBarChangeListener(new SeekBar.OnSeekBarChangeListener() {
+            @Override
+            public void onProgressChanged(SeekBar seekBar, int progress, boolean fromUser) {
+            }
+            @Override
+            public void onStartTrackingTouch(SeekBar seekBar) {
+
+            }
+            @Override
+            public void onStopTrackingTouch(SeekBar seekBar) {
+                nativeSeek(seekBar.getProgress());
+            }
+        });
+    }
+    private View.OnClickListener pclick =new View.OnClickListener() {
+        @Override
+        public void onClick(View v) {
+            Log.e("many","------on click-----w-----");
+            switch (v.getId()){
+                case R.id.bt_p:
+                    SDLActivity.mSingleton.onNativeKeyDown(KeyEvent.KEYCODE_P);
+                    break;
+                case R.id.bt_q:
+                    SDLActivity.mSingleton.onNativeKeyDown(KeyEvent.KEYCODE_Q);
+                    break;
+                case R.id.bt_w:
+                    SDLActivity.mSingleton.onNativeKeyDown(KeyEvent.KEYCODE_W);
+                    break;
+                case R.id.bt_s:
+                    SDLActivity.mSingleton.onNativeKeyDown(KeyEvent.KEYCODE_S);
+                    break;
+                case R.id.bt_left:
+                    SDLActivity.mSingleton.onNativeKeyDown(KeyEvent.KEYCODE_DPAD_LEFT);
+                    break;
+                case R.id.bt_right:
+                    SDLActivity.mSingleton.onNativeKeyDown(KeyEvent.KEYCODE_DPAD_RIGHT);
+                    break;
+            }
+
+        }
+    };
 
     // Events
     @Override
@@ -402,7 +491,6 @@ public class SDLActivity extends Activity {
     static final int COMMAND_TEXTEDIT_HIDE = 3;
     static final int COMMAND_SET_KEEP_SCREEN_ON = 5;
 
-    static final int COMMAND_UINFO = 100;
 
     protected static final int COMMAND_USER = 0x8000;
 
@@ -496,9 +584,22 @@ public class SDLActivity extends Activity {
                 }
                 break;
             }
-            case COMMAND_UINFO:
+            case 100:
             {
-                Log.e("many","------msg:"+msg.obj);
+                Log.e("many","------msg 100:"+msg.obj);
+                if(SDLActivity.mSeekbar != null){
+                    SDLActivity.mSeekbar.setProgress((Integer) msg.obj);
+                    SDLActivity.mSeekText.setText(""+msg.obj+"/"+SDLActivity.vduriation);
+                }
+                break;
+            }
+            case 101:
+            {
+                Log.e("many","------msg 101:"+msg.obj);
+                SDLActivity.vduriation = (Integer)msg.obj;
+                if(SDLActivity.mSeekbar != null){
+                    SDLActivity.mSeekbar.setMax((Integer) msg.obj);
+                }
                 break;
             }
             default:
@@ -543,7 +644,8 @@ public class SDLActivity extends Activity {
     public static native String nativeGetHint(String name);
     public static native void nativeSetenv(String name, String value);
 
-    public static native int getNstate(String cmd);
+    public static native String getNstate(String cmd);
+    public static native int nativeSeek(int cmd);
 
     /**
      * This method is called by SDL using JNI.
@@ -1348,10 +1450,14 @@ class SDLSurface extends SurfaceView implements SurfaceHolder.Callback,
         int i = -1;
         float x,y,p;
 
-        i = SDLActivity.getNstate("a");
-        Log.e("many","-----get gvDuri:"+i);
-        i = SDLActivity.getNstate("b");
-        Log.e("many","-----get gvCurr:"+i);
+
+        if(action == MotionEvent.ACTION_UP) {
+            if (SDLActivity.mPannel.getVisibility() == View.VISIBLE) {
+                SDLActivity.mPannel.setVisibility(View.GONE);
+            } else {
+                SDLActivity.mPannel.setVisibility(View.VISIBLE);
+            }
+        }
 
         // !!! FIXME: dump this SDK check after 2.0.4 ships and require API14.
         if (event.getSource() == InputDevice.SOURCE_MOUSE && SDLActivity.mSeparateMouseAndTouch) {

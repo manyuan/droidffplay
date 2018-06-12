@@ -112,26 +112,6 @@ const int program_birth_year = 2003;
 
 static unsigned sws_flags = SWS_BICUBIC;
 
-
-struct JavaReadState
-{
-    int duration;
-    int cur_dur;
-} gjs;
-
-JNIEXPORT jint JNICALL Java_org_libsdl_app_SDLActivity_getNstate(
-                                    JNIEnv* env, jclass jcls,
-                                    jstring filename)
-{
-    int ret = 0;
-    const char *path = (*env)->GetStringUTFChars(env, filename, NULL);
-    if(path[0] == 'a') ret = gjs.duration;
-    if(path[0] == 'b') ret = gjs.cur_dur;
-    __android_log_print(ANDROID_LOG_WARN,"many","------getNstte---f:%s\n",path);
-    (*env)->ReleaseStringUTFChars(env, filename, path);
-    return ret;
-}
-
 typedef struct MyAVPacketList {
     AVPacket pkt;
     struct MyAVPacketList *next;
@@ -328,6 +308,10 @@ typedef struct VideoState {
 
     SDL_cond *continue_read_thread;
 } VideoState;
+
+static VideoState *is;
+SDL_TimerID progresstimer;
+
 
 /* options specified by the user */
 static AVInputFormat *file_iformat;
@@ -1040,7 +1024,6 @@ static void video_image_display(VideoState *is)
     }
 
     SDL_RenderCopyEx(renderer, is->vid_texture, NULL, &rect, 0, NULL, vp->flip_v ? SDL_FLIP_VERTICAL : 0);
-    gjs.cur_dur = vp->pts;
     if (sp) {
 #if USE_ONEPASS_SUBTITLE_RENDER
         SDL_RenderCopy(renderer, is->sub_texture, NULL, &rect);
@@ -1317,6 +1300,9 @@ static void do_exit(VideoState *is)
     avformat_network_deinit();
     if (show_status)
         printf("\n");
+    if(progresstimer){
+        SDL_RemoveTimer(progresstimer);
+    }
     SDL_Quit();
     av_log(NULL, AV_LOG_QUIET, "%s", "");
     exit(0);
@@ -2851,9 +2837,7 @@ static int read_thread(void *arg)
     }
 
     is->realtime = is_realtime(ic);
-
-    gjs.duration = (int)(ic->duration);
-    //gjs.cur_dur = ic.current;
+    Android_JNI_SendMessage(101,(int)(ic->duration/AV_TIME_BASE));
 
     if (show_status)
         av_dump_format(ic, 0, is->filename, 0);
@@ -3283,7 +3267,6 @@ static void event_loop(VideoState *cur_stream)
                 do_exit(cur_stream);
                 break;
             }
-            Android_JNI_SendMessage(100,event.key.keysym.sym);
             switch (event.key.keysym.sym) {
             case SDLK_ESCAPE:
             case SDLK_AC_BACK:
@@ -3394,7 +3377,6 @@ static void event_loop(VideoState *cur_stream)
             }
             break;
         case SDL_MOUSEBUTTONDOWN:
-            Android_JNI_SendMessage(100,2);
             if (exit_on_mousedown) {
                 do_exit(cur_stream);
                 break;
@@ -3672,11 +3654,12 @@ void show_help_default(const char *opt, const char *arg)
            );
 }
 
+Uint32 timercallback(Uint32 interval, void *param);
 /* Called from the main */
 int main(int argc, char **argv)
 {
     int flags;
-    VideoState *is;
+    //VideoState *is;
 
     init_dynload();
 
@@ -3697,7 +3680,6 @@ int main(int argc, char **argv)
     show_banner(argc, argv, options);
 
     parse_options(NULL, argc, argv, options, opt_input_file);
-
     if (!input_filename) {
         show_usage();
         av_log(NULL, AV_LOG_FATAL, "An input file must be specified\n");
@@ -3728,8 +3710,6 @@ int main(int argc, char **argv)
 
     SDL_EventState(SDL_SYSWMEVENT, SDL_IGNORE);
     SDL_EventState(SDL_USEREVENT, SDL_IGNORE);
-
-    Android_JNI_SendMessage(100,1);
 
     av_init_packet(&flush_pkt);
     flush_pkt.data = (uint8_t *)&flush_pkt;
@@ -3765,9 +3745,63 @@ int main(int argc, char **argv)
         do_exit(NULL);
     }
 
+    progresstimer = SDL_AddTimer(1000, timercallback, NULL);
+    if (NULL == timercallback)
+    {
+        __android_log_print(ANDROID_LOG_WARN,"many","add timer fail: %s\n", SDL_GetError());
+    }
+
     event_loop(is);
 
     /* never returns */
 
     return 0;
+}
+
+
+Uint32 timercallback(Uint32 interval, void *param)
+{
+    int cur = (int)get_master_clock(is);
+    Android_JNI_SendMessage(100,cur);
+    return interval;
+}
+
+JNIEXPORT jstring JNICALL Java_org_libsdl_app_SDLActivity_getNstate(
+        JNIEnv* env, jclass jcls,
+        jstring filename)
+{
+    jstring ret;
+    char rt[100];
+    const char *path = (*env)->GetStringUTFChars(env, filename, NULL);
+    memset(rt,0,100);
+    if(is){
+        double tot = is->ic->duration/AV_TIME_BASE;
+        double cur = get_master_clock(is);
+        sprintf(rt,"%d/%d",(int)cur,(int)tot);
+    }else{
+        sprintf(rt,"%d/%d",0,0);
+    }
+    __android_log_print(ANDROID_LOG_WARN,"many","------getNstte---f:%s\n",path);
+    (*env)->ReleaseStringUTFChars(env, filename, path);
+    ret=(*env)->NewStringUTF(env,rt);
+    return ret;
+}
+
+
+JNIEXPORT jint JNICALL Java_org_libsdl_app_SDLActivity_nativeSeek(
+        JNIEnv* env, jclass jcls,
+        jint pos)
+{
+    if(is){
+        __android_log_print(ANDROID_LOG_WARN,"many","------pos 1---f:%d\n",pos);
+        int npos = get_master_clock(is);
+        int incr = pos - npos;
+
+        if (is->ic->start_time != AV_NOPTS_VALUE && pos < is->ic->start_time / (double)AV_TIME_BASE)
+            pos = is->ic->start_time / (double)AV_TIME_BASE;
+        stream_seek(is, (int64_t)(pos * AV_TIME_BASE), (int64_t)(incr * AV_TIME_BASE), 0);
+        __android_log_print(ANDROID_LOG_WARN,"many","------pos 2---f:%d\n",pos);
+    }
+    return 0;
+
 }

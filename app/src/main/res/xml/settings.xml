@@ -1,0 +1,45 @@
+<?xml version="1.0" encoding="utf-8"?>
+<PreferenceScreen xmlns:android="http://schemas.android.com/apk/res/android"
+    android:title="Settings" >
+
+    <!-- 单独一个复选框 -->
+    <PreferenceCategory android:title="Options" >
+        <CheckBoxPreference
+            android:key="checkbox_an"
+            android:summary="disable audio"
+            android:title="-an" />
+        <CheckBoxPreference
+            android:key="checkbox_vn"
+            android:summary="disable video"
+            android:title="-vn" />
+        <CheckBoxPreference
+            android:key="checkbox_sn"
+            android:summary="disable subtitling"
+            android:title="-sn" />
+        <CheckBoxPreference
+            android:key="checkbox_ss"
+            android:summary="seek to a given position in seconds"
+            android:title="-ss" />
+        <EditTextPreference
+            android:dependency="checkbox_ss"
+            android:dialogTitle="seconds"
+            android:key="edittext_ss"
+            android:summary="0"
+            android:title="ss value" />
+        <CheckBoxPreference
+            android:key="checkbox_autoexit"
+            android:summary="exit at the end"
+            android:title="-autoexit" />
+        <CheckBoxPreference
+            android:key="checkbox_loop"
+            android:summary="set number of times the playback shall be looped"
+            android:title="-loop" />
+        <EditTextPreference
+            android:dependency="checkbox_loop"
+            android:dialogTitle="times"
+            android:key="edittext_loop"
+            android:summary="0"
+            android:title="loop value" />
+    </PreferenceCategory>
+
+</PreferenceScreen>  
