@@ -2,8 +2,10 @@ package org.libsdl.app;
 
 import java.io.IOException;
 import java.io.InputStream;
+import java.util.ArrayList;
 import java.util.Arrays;
 import java.lang.reflect.Method;
+import java.util.List;
 
 import android.app.*;
 import android.content.*;
@@ -131,21 +133,25 @@ public class SDLActivity extends Activity {
      */
     protected String[] getArguments() {
         //return new String[0];
-        String pa = "-fs rtmp://live.hkstv.hk.lxdns.com/live/hks";
-        //pa = "-fs rtsp://184.72.239.149/vod/mp4://BigBuckBunny_175k.mov";
-        //pa = "-fs rtsp://rtsp-v3-spbtv.msk.spbtv.com/spbtv_v3_1/214_110.sdp"; //vpn
-        //pa = "-fs http://live.hkstv.hk.lxdns.com/live/hks/playlist.m3u8";
-        //pa = "-fs -autoexit /data/test.mp4";
+
+        SharedPreferences sp = getSharedPreferences("options",Context.MODE_PRIVATE);
+        String pas = sp.getString("params","-fs");
+        String file = sp.getString("path","rtmp://live.hkstv.hk.lxdns.com/live/hks");
+
+        String[] ps = pas.split(" ");
+        String[] ret = new String[ps.length+1];
+        System.arraycopy(ps,0,ret,0,ps.length);
+        ret[ps.length] = file;
 
         Intent intent = getIntent();
         if (intent != null && intent.getData() != null) {
             String filename = intent.getData().getPath();
             if (filename != null) {
                 Log.v(TAG, "Got filename: " + filename);
-                pa = "-fs -autoexit " + filename;
+                ret[ps.length] = filename;
             }
         }
-        return pa.split(" ");
+        return ret;
     }
 
     public static void initialize() {
